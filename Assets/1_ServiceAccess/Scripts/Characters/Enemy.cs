@@ -19,6 +19,8 @@ namespace Excercise1
         protected override void OnEnable()
         {
             base.OnEnable();
+            _player = CharacterService.Instance?.GetCharacter(playerId);//Service locator
+            Debug.Log($"Registrando personaje con id: {id}");
             //TODO: Get the reference to the player.
             if (_player == null)
                 Debug.LogError($"{_logTag} Player not found!");
