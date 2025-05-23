@@ -3,83 +3,54 @@ using UnityEngine.InputSystem;
 
 namespace Gameplay
 {
-    [RequireComponent(typeof(Character))]
-    public class PlayerController : MonoBehaviour
-    {
-        [SerializeField] private InputActionReference moveInput;
-        [SerializeField] private InputActionReference jumpInput;
-        [SerializeField] private float airborneSpeedMultiplier = .5f;
-        //TODO: This booleans are not flexible enough. If we want to have a third jump or other things, it will become a hazzle.
-        private bool _isJumping;
-        private bool _isDoubleJumping;
-        private Character _character;
-        private Coroutine _jumpCoroutine;
-
-        private void Awake()
-            => _character = GetComponent<Character>();
-
-        private void OnEnable()
+    
+        [RequireComponent(typeof(Character))]
+        public class PlayerController : MonoBehaviour
         {
-            if (moveInput?.action != null)
+            [SerializeField] private InputActionReference moveInput;
+            [SerializeField] private InputActionReference jumpInput;
+            [SerializeField] private float airborneSpeedMultiplier = 0.5f;
+
+            private Character _character;
+            private PlayerSM _stateMachine;
+
+            private void Awake()
             {
-                moveInput.action.started += HandleMoveInput;
-                moveInput.action.performed += HandleMoveInput;
-                moveInput.action.canceled += HandleMoveInput;
+                _character = GetComponent<Character>();
+                _stateMachine = new PlayerSM(_character, this, moveInput, airborneSpeedMultiplier);
             }
-            if (jumpInput?.action != null)
-                jumpInput.action.performed += HandleJumpInput;
-        }
-        private void OnDisable()
-        {
-            if (moveInput?.action != null)
+
+            private void OnEnable()
             {
-                moveInput.action.performed -= HandleMoveInput;
-                moveInput.action.canceled -= HandleMoveInput;
+                moveInput.action.started += _stateMachine.HandleInput;
+                moveInput.action.performed += _stateMachine.HandleInput;
+                moveInput.action.canceled += _stateMachine.HandleInput;
+                jumpInput.action.performed += _stateMachine.HandleInput;
             }
-            if (jumpInput?.action != null)
-                jumpInput.action.performed -= HandleJumpInput;
-        }
 
-        private void HandleMoveInput(InputAction.CallbackContext ctx)
-        {
-            var direction = ctx.ReadValue<Vector2>().ToHorizontalPlane();
-            if (_isJumping || _isDoubleJumping)
-                direction *= airborneSpeedMultiplier;
-            _character?.SetDirection(direction);
-        }
-
-        private void HandleJumpInput(InputAction.CallbackContext ctx)
-        {
-            //TODO: This function is barely readable. We need to refactor how we control the jumping
-            if (_isJumping)
+            private void OnDisable()
             {
-                if (_isDoubleJumping)
-                    return;
-                RunJumpCoroutine();
-                _isDoubleJumping = true;
-                return;
+                moveInput.action.started -= _stateMachine.HandleInput;
+                moveInput.action.performed -= _stateMachine.HandleInput;
+                moveInput.action.canceled -= _stateMachine.HandleInput;
+                jumpInput.action.performed -= _stateMachine.HandleInput;
             }
-            RunJumpCoroutine();
-            _isJumping = true;
-        }
 
-        private void RunJumpCoroutine()
-        {
-            if (_jumpCoroutine != null)
-                StopCoroutine(_jumpCoroutine);
-            _jumpCoroutine = StartCoroutine(_character.Jump());
-        }
-
-        private void OnCollisionEnter(Collision other)
-        {
-            foreach (var contact in other.contacts)
+            private void Update()
             {
-                if (Vector3.Angle(contact.normal, Vector3.up) < 5)
+                _stateMachine.Update();
+            }
+
+            private void OnCollisionEnter(Collision collision)
+            {
+                foreach (var contact in collision.contacts)
                 {
-                    _isJumping = false;
-                    _isDoubleJumping = false;
+                    if (Vector3.Angle(contact.normal, Vector3.up) < 5f)
+                    {
+                        _stateMachine.ResetJumps();
+                        _stateMachine.ChangeState(new Walk(_character, moveInput, airborneSpeedMultiplier));
+                    }
                 }
             }
         }
-    }
 }
